@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bookmarks Dashboard</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        h1 {
+            margin: 0;
+            color: #2c3e50;
+        }
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input, button {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        input[type="search"] {
+            flex-grow: 1;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .bookmark-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .bookmark-item {
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            padding: 15px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        .bookmark-date {
+            color: #7f8c8d;
+            font-size: 0.8em;
+            margin-bottom: 5px;
+        }
+        .bookmark-text {
+            word-break: break-word;
+        }
+        .delete-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        .delete-btn:hover {
+            background: #c0392b;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .pagination button {
+            min-width: 40px;
+        }
+        .new-bookmark-form {
+            margin-bottom: 30px;
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 4px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 50px;
+            color: #7f8c8d;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Bookmarks Dashboard</h1>
+    </header>
+
+    <div class="new-bookmark-form">
+        <h2>Add New Bookmark</h2>
+        <form id="bookmark-form">
+            <textarea id="bookmark-text" placeholder="Enter bookmark text here..." required></textarea>
+            <button type="submit">Save Bookmark</button>
+        </form>
+    </div>
+
+    <div class="toolbar">
+        <input type="search" id="search-input" placeholder="Search bookmarks...">
+        <button id="search-button">Search</button>
+        <button id="clear-search">Clear</button>
+    </div>
+
+    <div id="loading" class="loading" style="display: none;">Loading bookmarks...</div>
+    
+    <div id="empty-state" class="empty-state" style="display: none;">
+        <p>You don't have any bookmarks yet. Add your first one above!</p>
+    </div>
+
+    <ul id="bookmark-list" class="bookmark-list"></ul>
+
+    <div class="pagination">
+        <button id="prev-page" disabled>Previous</button>
+        <span id="page-info">Page 1</span>
+        <button id="next-page">Next</button>
+    </div>
+
+    <script>
+        // Dashboard state
+        const state = {
+            bookmarks: [],
+            currentPage: 1,
+            itemsPerPage: 10,
+            totalItems: 0,
+            searchQuery: '',
+            loading: false
+        };
+
+        // DOM Elements
+        const bookmarkForm = document.getElementById('bookmark-form');
+        const bookmarkText = document.getElementById('bookmark-text');
+        const bookmarkList = document.getElementById('bookmark-list');
+        const searchInput = document.getElementById('search-input');
+        const searchButton = document.getElementById('search-button');
+        const clearSearchButton = document.getElementById('clear-search');
+        const prevPageButton = document.getElementById('prev-page');
+        const nextPageButton = document.getElementById('next-page');
+        const pageInfo = document.getElementById('page-info');
+        const loadingEl = document.getElementById('loading');
+        const emptyStateEl = document.getElementById('empty-state');
+
+        // Format date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString();
+        }
+
+        // Fetch bookmarks
+        async function fetchBookmarks() {
+            state.loading = true;
+            updateUI();
+
+            const offset = (state.currentPage - 1) * state.itemsPerPage;
+            const searchParam = state.searchQuery ? `&search=${encodeURIComponent(state.searchQuery)}` : '';
+            
+            try {
+                const response = await fetch(`/bookmarks?limit=${state.itemsPerPage}&offset=${offset}${searchParam}`);
+                if (!response.ok) throw new Error('Failed to fetch bookmarks');
+                
+                const data = await response.json();
+                state.bookmarks = data.bookmarks;
+                state.totalItems = data.pagination.total;
+                
+                // Update UI with the new data
+                renderBookmarks();
+                updatePagination();
+            } catch (error) {
+                console.error('Error fetching bookmarks:', error);
+                bookmarkList.innerHTML = `<p class="error">Failed to load bookmarks. Please try again.</p>`;
+            } finally {
+                state.loading = false;
+                updateUI();
+            }
+        }
+
+        // Render bookmarks
+        function renderBookmarks() {
+            if (state.bookmarks.length === 0) {
+                emptyStateEl.style.display = 'block';
+                bookmarkList.innerHTML = '';
+                return;
+            }
+            
+            emptyStateEl.style.display = 'none';
+            
+            bookmarkList.innerHTML = state.bookmarks.map(bookmark => `
+                <li class="bookmark-item" data-id="${bookmark.id}">
+                    <div class="bookmark-date">${formatDate(bookmark.created_at)}</div>
+                    <div class="bookmark-text">${escapeHtml(bookmark.text)}</div>
+                    <button class="delete-btn" data-id="${bookmark.id}">Delete</button>
+                </li>
+            `).join('');
+            
+            // Add event listeners to delete buttons
+            document.querySelectorAll('.delete-btn').forEach(button => {
+                button.addEventListener('click', () => deleteBookmark(button.dataset.id));
+            });
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Update pagination controls
+        function updatePagination() {
+            const totalPages = Math.ceil(state.totalItems / state.itemsPerPage);
+            pageInfo.textContent = `Page ${state.currentPage} of ${totalPages || 1}`;
+            
+            prevPageButton.disabled = state.currentPage <= 1;
+            nextPageButton.disabled = state.currentPage >= totalPages;
+        }
+
+        // Update UI based on state
+        function updateUI() {
+            loadingEl.style.display = state.loading ? 'block' : 'none';
+            bookmarkList.style.display = state.loading ? 'none' : 'block';
+        }
+
+        // Add new bookmark
+        async function addBookmark(text) {
+            try {
+                const response = await fetch('/bookmarks', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ text })
+                });
+                
+                if (!response.ok) throw new Error('Failed to add bookmark');
+                
+                // Refresh the bookmarks list
+                state.currentPage = 1; // Go back to first page
+                await fetchBookmarks();
+                
+                // Clear the form
+                bookmarkText.value = '';
+            } catch (error) {
+                console.error('Error adding bookmark:', error);
+                alert('Failed to add bookmark. Please try again.');
+            }
+        }
+
+        // Delete bookmark
+        async function deleteBookmark(id) {
+            if (!confirm('Are you sure you want to delete this bookmark?')) return;
+            
+            try {
+                const response = await fetch(`/bookmarks/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                if (!response.ok) throw new Error('Failed to delete bookmark');
+                
+                // Refresh the bookmarks list
+                await fetchBookmarks();
+            } catch (error) {
+                console.error('Error deleting bookmark:', error);
+                alert('Failed to delete bookmark. Please try again.');
+            }
+        }
+
+        // Event Listeners
+        bookmarkForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (bookmarkText.value.trim()) {
+                addBookmark(bookmarkText.value.trim());
+            }
+        });
+
+        searchButton.addEventListener('click', () => {
+            state.searchQuery = searchInput.value.trim();
+            state.currentPage = 1; // Reset to first page when searching
+            fetchBookmarks();
+        });
+
+        clearSearchButton.addEventListener('click', () => {
+            searchInput.value = '';
+            state.searchQuery = '';
+            fetchBookmarks();
+        });
+
+        prevPageButton.addEventListener('click', () => {
+            if (state.currentPage > 1) {
+                state.currentPage--;
+                fetchBookmarks();
+            }
+        });
+
+        nextPageButton.addEventListener('click', () => {
+            state.currentPage++;
+            fetchBookmarks();
+        });
+
+        // Search on Enter key
+        searchInput.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') {
+                searchButton.click();
+            }
+        });
+
+        // Initialize the dashboard
+        fetchBookmarks();
+    </script>
+</body>
+</html>
