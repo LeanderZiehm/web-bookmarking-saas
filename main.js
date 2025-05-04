@@ -206,6 +206,6 @@ async function saveBookmark(text, ip, userAgent) {
 app.get('/health', (req, res) => res.send('OK'));
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Bookmarking service running at http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Bookmarking service running at http://0.0.0.0:${PORT}`);
 });
